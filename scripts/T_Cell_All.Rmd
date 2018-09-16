@@ -1,0 +1,336 @@
+---
+title: "McCullough T Cells Summary (All)"
+author: "Stanley Yang"
+date: "1/5/2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, style, echo=FALSE, message=FALSE}
+library(BiocStyle)
+library(knitr)
+opts_chunk$set(echo=FALSE, result='markup', error=FALSE, message=FALSE, warning=FALSE, comment=NA)
+opts_chunk$set(fig.width=7, fig.height=7, out.width="3.5in", fig.align="center")
+#opts_chunk$set(fig.width=7, fig.height=7, out.width="3.5in", fig.align="center", fig.path="../figure/")
+# if figures are shown in the output file, do NOT include the above code
+library(dplyr)
+library(purrr)
+library(ggplot2)
+```
+
+# All T cell data 
+
+```{r data prep, result='hide'}
+out_prefix<-"all_Tcells"
+out_analysis <- "../analysis/"
+out_figure <- "../figures/"
+
+## load rna-seq count file and design file
+rna.file = "../data/All_Tcell_and_Spleen_GeneCount.txt"
+design.file = "../data/design_file.txt"
+
+data.design = read.table(design.file,  sep="\t", head=T, quote="", check.names=F)
+data.design$Sample_Name <- gsub(pattern="-", x = data.design$Sample_Name, replacement = ".")
+
+data.raw = read.table(rna.file,  sep="\t", head=T, quote="", check.names=F, row.names=1)
+colnames(data.raw)= data.design$Sample_Name
+
+## Idenitfy the number of model terms.
+if("TERM_4" %in% colnames(data.design)){
+  #Fit a GLM since there are multiple factors.
+  #Exact test is only for "1" factor models!
+  term.n  = 4
+  #Specify the factors and its levels.  
+  group = factor(paste(data.design$TERM_1, data.design$TERM_2, data.design$TERM_3, data.design$TERM_4, sep="."))
+  #Append group (factor levels) to the design table.
+  data.design = cbind(data.design, Group=group)
+}else if("TERM_3" %in% colnames(data.design)){
+  term.n  = 3    
+  group = factor(paste(data.design$TERM_1, data.design$TERM_2, data.design$TERM_3, sep="."))
+  data.design = cbind(data.design, Group=group)
+}else if("TERM_2" %in% colnames(data.design)){
+  term.n  = 2
+  group = factor(paste(data.design$TERM_1, data.design$TERM_2, sep="."))
+  data.design = cbind(data.design, Group=group)
+}else{
+  #Run exact test since only one factor.
+  term.n  = 1
+  group = factor(data.design$TERM_1)
+  data.design = cbind(data.design, Group=group)
+}
+```
+
+## Sample Summary for all T cells
+
+```{r sample summary}
+# library(dplyr)
+data.design %>% group_by(Group) %>% summarise(N=n())
+```
+
+## Normalize and Filter the data
+
+#### Before normalization
+```{r before , result='markup'}
+library(edgeR)
+y <- DGEList(data.raw, group=group, genes=row.names(data.raw)) # must specify
+options(digits=3)
+y$samples[,-1]
+## symbols, message=FALSE
+library(org.Mm.eg.db)
+y$genes$Symbol <- mapIds(org.Mm.eg.db, rownames(y),
+                         keytype="ENSEMBL", column="SYMBOL")  # keytype="ENSEMBL", attach gene Symbol from database to DGElist y 
+y$genes$Entrezid <- mapIds(org.Mm.eg.db, rownames(y),
+                           keytype="ENSEMBL", column="ENTREZID")
+y$genes$Genename <- mapIds(org.Mm.eg.db, rownames(y),
+                           keytype="ENSEMBL", column="GENENAME")
+```
+
+#### before filtering low-count genes
+```{r, before fitering}
+before_sum<-data.frame(dim(y$counts))
+rownames(before_sum) <- c("total number of genes detected", "total sample number")
+before_sum
+```
+
+#### keep the genes that have more than 1 count per million (cpm) in at least 2 samples
+
+```{r, fitering}
+## dropNAsymbols
+y <- y[!is.na(y$genes$Symbol),]
+## keep
+keep <- rowSums(cpm(y) > 1) >= 2
+# table(keep)
+## ----filter--------------------------------------------------------------
+y <- y[keep, , keep.lib.sizes=FALSE]
+after_sum<-data.frame(dim(y$counts))
+rownames(after_sum) <- c("total number of genes after filtering", "total sample number")
+after_sum
+```
+
+#### normalize the filtered genes across all samples
+```{r normalization}
+## ----norm----------------------------------------------------------------
+y <- calcNormFactors(y)
+# y$samples %>% select(-group)
+y$samples[,-1]
+```
+
+
+## Explore the data samples
+
+#### MDS plot
+
+to check the distance among samples (Figure 1)
+
+```{r 01_MDS_plot, fig.width=7, fig.height=6, fig.cap="MDS plot"}
+par(xpd = T, mar = par()$mar + c(0,0,0,7))  # to make legends outside of the plot
+plotMDS(y, top = 500, cex = 1, pch=9, dim.plot = c(1,2), ndim = 2, gene.selection = "pairwise", col=as.numeric(group)) # col = as.numeric(group) differentiate colors between groups
+legend(5.5, 0.025,levels(group), pch=rep(9, length(group)), col=levels(as.factor(as.numeric(group))), cex = 0.6)
+par(mar=c(5, 4, 4, 3.5) + 0.1)
+```
+
+
+```{r MD_plots, results='hide', fig.width=7, fig.height=7, out.width="3.5in", fig.align="center", fig.path="../figure/"}
+## mdplot1, MD plot of log2-expression in sample x versus the average log2-expression across all other samples. Each point represents a gene, and the red line indicates a log-ratio of zero. The majority of points cluster around the red line.
+plotMD_All <- function(column, object){
+  #object is dge object in edgR
+  plotMD(object, column)
+  abline(h=0, col="red", lty=2, lwd=2)
+  }
+
+# as.list(seq(ncol(y$counts))) %>% walk(plotMD_All,object=y)
+```
+
+```{r dispersion, results='hide', fig.width=7, fig.height=7, out.width="3.5in", fig.align="center", fig.cap="Scatterplot of the biological coefficient of variation (BCV) against the average abundance of each gene. The plot shows the square-root estimates of the common, trended and tagwise negative binomial (NB) dispersions."}
+## ----design--------------------------------------------------------------
+design <- model.matrix(~0+group)
+colnames(design) <- levels(group)
+design
+
+## ----estimateDisp--------------------------------------------------------
+y <- estimateDisp(y, design, robust=TRUE)
+
+## ----plotBCV, width="3.8in", fig.cap="Scatterplot of the biological coefficient of variation (BCV) against the average abundance of each gene. The plot shows the square-root estimates of the common, trended and tagwise NB dispersions."----
+# plotBCV(y)
+
+## ----glmQLFit------------------------------------------------------------
+fit <- glmQLFit(y, design, robust=TRUE)
+head(fit$coefficients)
+
+## ----QLDisp, out.width="3.8in", fig.cap="A plot of the quarter-root QL dispersion against the average abundance of each gene. Estimates are shown for the raw (before EB moderation), trended and squeezed (after EB moderation) dispersions. Note that the QL dispersions and trend shown here are relative to the NB dispersion trend shown in Figure~\ref{fig:plotBCV}."----
+# plotQLDisp(fit)
+
+## ----df.prior------------------------------------------------------------
+summary(fit$df.prior)
+```
+
+
+#### Principal Component Analysis (PCA)
+
+1. scree plot to show all possible components for variance explained
+  * proportion of variance explained for each individual components (Figure 2)
+  * cumulative proportion of variance explained (Figure 3)
+
+```{r scree_plots, results='hide', fig.width=4.5, fig.height=4.5, fig.cap="Scree Plot"}
+## ----cpm-----------------------------------------------------------------
+logCPM <- cpm(y, prior.count=2, log=TRUE)
+logCPM.PCA<-logCPM # save it later for PCA plot
+rownames(logCPM) <- y$genes$Symbol
+#colnames(logCPM) <- paste(y$samples$group, 1:2, sep="-")
+colnames(logCPM) <- data.design$Sample_Name # get it into the y project
+
+## ---Pincicpal component analysis ---
+pca_original = prcomp(t(logCPM.PCA),scale=T, center=T)
+pca_x <- pca_original$x
+pca_table <- data.frame(pca_x, data.design)
+x <- pca_original$sdev^2/sum(pca_original$sdev^2) # Proportion of Variance Explained for all components
+
+## Scree plot
+plot(x, xlab="Principal Component", ylab="Proportion of Variance Explained", type="b")
+plot(cumsum(x), xlab="Principal Component", ylab="Cumulative Proportion of Variance Explained", type="b")
+```
+
+2. PCA plot to show the first, second and third components 
+  * Tissue difference between brain and spleen explains the variance for the first component, as most of sample from brain (circle) is larger than -25 on PC1 axis whereas samples from spleen tissue (triangle) is less -25 on PC1 axis (Figure 4).  
+  * Stimulation may explain the variance as the second component, as most of sample without stimulation (circle) is above 0 on PC2 axis whereas samples with stimuation (triangle) is below 0 on PC1 axis (Figure 5).
+  * Dimention PC2 and PC3 of PCA plot are constructed in Figure 6 and Figure 7. There is no obvious factor that contribute to PC3.
+  
+```{r PCA plot, fig.width=7, fig.height=4.5, fig.cap="PCA Plot"}
+PCA_plot <- function(pca_table, PC_x, PC_y, color, shape){
+  #PC_x,PC_y are type of interger
+  #color, shape, are type of string
+  g <- ggplot(pca_table, aes_string(x=names(pca_table[PC_x]), y=names(pca_table[PC_y]), color=color, shape=shape)) 
+  g <- g + geom_point(alpha=0.7, size=3) 
+  # g <- g + labs(color = "Group", shape="Tissue")
+  g + labs(x = paste(names(pca_table[PC_x]), scales::percent(x[PC_x]),"variance explained", sep=" "), y=paste(names(pca_table[PC_y]), scales::percent(x[PC_y]),"variance explained", sep=" "))
+  #filename <- paste()
+  #ggsave(filename, width=7, height=7, units="in")
+}
+
+PCA_plot(pca_table, 1, 2, "Group", "TERM_3")
+PCA_plot(pca_table, 1, 2, "Group", "TERM_4")
+PCA_plot(pca_table, 2, 3, "Group", "TERM_3")
+PCA_plot(pca_table, 2, 3, "Group", "TERM_4")
+
+```
+
+
+## Differential expression analysis
+#### testing for differential expression
+
+1. Methods for DE gene analysis (edgeR package)
+
+  * I use generalized linear model based quasi-likelihood (QL) F-tests (glmQLFtest) instead of likelihood ratio test (LRT) for find DE genes as they give stricter error rate control by accounting for the uncertainty in dispersion estimation. (The old DE gene lists were made by LRT methods)
+  * There are two kinds of QL F-tests used in DE gene analysis, they are marked in the output files
+    + glmTreat_1 : identifies differential expression based on statistical significance (*FDR < 0.05* as a cutoff) regardless of how small the difference might be. (1 means the FC = 1)
+    + glmTreat_1.5 : identifies the differential expression fold changes are significantly greater than a specified fold change which is 1.5 in this case. (1.5 means FC=1.5, can be changed)  
+
+2. list of all the comparisions and their meanings: 
+
+  * a1_BrvsSp.A.M.NS = Aged.Male.Brain.NoStim - Aged.Male.Spleen.NoStim
+    + The difference between unstimulated brain and spleen T-cells in aged male mice.
+    + Positive FC indicates the gene expression is higher in Aged.Male.Brain.NoStim than in Aged.Male.Spleen.NoStim, negative FC indicates the gene expression is lower in Aged.Male.Brain.NoStim than in Aged.Male.Spleen.NoStim. The same rule applies to the rest of the comparisons. 
+    + a1_BrvsSp.A.M.NS will be attached to the output file names indicating this comparison type.The same rule for the rest of the comparsions.
+    
+  * a2_BrvsSp.A.M.PS = Aged.Male.Brain.PlusStim - Aged.Male.Spleen.PlusStim
+    + The difference between stimulated brain and spleen T-cells in aged male mice.
+    
+  * a3_Stim_BrvsSp.A.M = (Aged.Male.Brain.PlusStim - Aged.Male.Brain.NoStim) - (Aged.Male.Spleen.PlusStim - Aged.Male.Spleen.NoStim)
+    + The difference between Brain and Spleen T cells in response to stimulation (interaction effect between tissue and stimulation). 
+    
+  * a4_AvsY.M.Br.NS = Aged.Male.Brain.NoStim - Young.Male.Brain.NoStim
+    + The difference between unstimulated T-cells in aged and young male mice. 
+  
+  * a5_FvsM.A.Br.NS = Aged.Female.Brain.NoStim - Aged.Male.Brain.NoStim
+    + The difference between unstimulated T-cells in female and male mice.
+    
+  * a6_FvsM.A.Br.PS = Aged.Female.Brain.PlusStim - Aged.Male.Brain.PlusStim
+    + The difference between stimulated T-cells in female and male mice.
+    
+  * a7_Stim_FvsM.A.Br = (Aged.Female.Brain.PlusStim - Aged.Female.Brain.NoStim ) - (Aged.Male.Brain.PlusStim - Aged.Male.Brain.NoStim),
+    + The difference between brain T-cells of female and male in response to stimulation (interaction effect between sex and stimulation). 
+    
+  * a8_Stim_A.M.Br = Aged.Male.Brain.PlusStim - Aged.Male.Brain.NoStim
+    + The difference between stimulated and unstimulated T-cells in aged male brain
+    
+  * a9_PSvsNS_A.F.Br = Aged.Female.Brain.PlusStim - Aged.Female.Brain.NoStim
+    + The difference between stimulated and unstimulated T-cells in aged female brain
+  
+  * a10_PSvsNS_A.M.Sp = Aged.Male.Spleen.PlusStim - Aged.Male.Spleen.NoStim
+    + The difference between stimulated and unstimulated T-cells in aged male spleen 
+  
+  3. Downstream analysis of DE gene set
+
+  * Gene ontology analysis: 
+    + all the genes from **glmTreat_1** or **glmTreat_1.5** lists with FDR<0.05 were put into gene ontology analysis.
+    + The **Up** and **Down** columns indicate the number of genes within the GO terms that are sigificantly up- and down-regulated in this differential expression comparison, respectively. The **P.Up** and **P.Down** columns contain the p-values for over-representation of the GO term in the up- and down-regulated genes, respectively. 
+    + GO terms with p-value less than **10^-5^** were kept. 
+  
+  * KEGG pathway analysis
+    + all the genes from **glmTreat_1** or **glmTreat_1.5** lists with FDR<0.05 were put into KEGG analysis.
+    + same meaning for **Up** and **Down** ,and **P.Up** and **P.Down** columns as in GO terms
+    + I kept **p-value < 0.05** for KEGG analysis. May need **p < 10^-5^** for more stringent threthold.
+  
+4. Decode output files of DE gene lists and down stream analysis
+
+Take a2_BrvsSp.A.M.PS comparison as an example: first refer to comparison table to find out this comparison means: The difference between stimulated brain and spleen T-cells in aged male mice. It contains four files starting with all_Tcells followed by the name of this comparison: 
+
+ * all_Tcells_a2_BrvsSp.A.M.PS_glmTreat_1.txt
+    + glmTreat using glm QL F-tests for significant DE genes (FDR<0.05) no matter how small the change is.
+    + DE gene list can be further maually put into KEGG or GO online tool for detailed analysis 
+ * all_Tcells_a2_BrvsSp.A.M.PS_glmTreat_1.5.txt
+    + glmTreat using glm QL F-tests for significant DE genes (FDR<0.05) that has a fold change greater than 1.5 in either direction
+ * all_Tcells_a2_BrvsSp.A.M.PS_KEGG_1.txt
+    + KEGG analysis of DE genes (FDR<0.05) from glmTreat_1 file
+    + not all the comparison has an output file of KEGG analysis, only the gene sets meet KEGG analysis p-value standard will have this output file. Same rule applies to gene ontology analysis.
+ * all_Tcells_a2_BrvsSp.A.M.PS_KEGG_1.5.txt
+    + KEGG analysis of DE genes (FDR<0.05) from glmTreat_1.5 file
+ * all_Tcells_a2_BrvsSp.A.M.PS_Ont_1.5.txt
+    + Gene Ontology analysis of DE genes (FDR<0.05) from glmTreat_1.5 file
+    + There is no output of Gene Ontology analysis of DE genes (FDR<0.05) from glmTreat_1 file
+
+#### heatmap visualization of sample clustering 
+
+Heatmaps are a popular way to display DE results for publicaiton pruposes. Here I generated a sample heatmap based on top 100 DE genes (**glmTreat_1.5**) between unstimulated brain and spleen T-cells in aged male mice (comparison code: a1_BrvsSp.A.M.NS) (Figure 8).
+
+```{r contrast}
+## ----MakeContrasts--------------------------------------------------------------
+con <- makeContrasts(
+  a1_BrvsSp.A.M.NS = Aged.Male.Brain.NoStim - Aged.Male.Spleen.NoStim,
+  a2_BrvsSp.A.M.PS = Aged.Male.Brain.PlusStim - Aged.Male.Spleen.PlusStim,
+  a3_Stim_BrvsSp.A.M = (Aged.Male.Brain.PlusStim - Aged.Male.Brain.NoStim) - (Aged.Male.Spleen.PlusStim - Aged.Male.Spleen.NoStim),
+  a4_AvsY.M.Br.NS = Aged.Male.Brain.NoStim - Young.Male.Brain.NoStim,
+  a5_FvsM.A.Br.NS = Aged.Female.Brain.NoStim - Aged.Male.Brain.NoStim,
+  a6_FvsM.A.Br.PS = Aged.Female.Brain.PlusStim - Aged.Male.Brain.PlusStim,
+  a7_Stim_FvsM.A.Br = (Aged.Female.Brain.PlusStim - Aged.Female.Brain.NoStim ) - (Aged.Male.Brain.PlusStim - Aged.Male.Brain.NoStim),
+  a8_PSvsNS_A.M.Br = Aged.Male.Brain.PlusStim - Aged.Male.Brain.NoStim, 
+  a9_PSvsNS_A.F.Br = Aged.Female.Brain.PlusStim - Aged.Female.Brain.NoStim,
+  a10_PSvsNS_A.M.Sp = Aged.Male.Spleen.PlusStim - Aged.Male.Spleen.NoStim,
+  levels=design
+)
+```
+
+
+```{r heatmap, fig.width=8, fig.height=12, fig.cap="heat map across all the samples using the top 100 most DE genes between brain and spleen samples (in aged male mice)"}
+tr <- glmTreat(fit, contrast=con[,1], lfc=log2(1.5))
+logCPM <- cpm(y, prior.count=2, log=TRUE)
+logCPM.PCA<-logCPM # save it later for PCA plot
+rownames(logCPM) <- y$genes$Symbol
+#colnames(logCPM) <- paste(y$samples$group, 1:2, sep="-")
+colnames(logCPM) <- data.design$Sample_Name # get it into the y project
+
+## ----order---------------------------------------------------------------
+o <- order(tr$table$PValue)
+logCPM <- logCPM[o[1:100],]
+
+## ----scale---------------------------------------------------------------
+logCPM <- t(scale(t(logCPM)))
+
+library(gplots)
+col.pan <- colorpanel(100, "blue", "white", "red")
+heatmap.2(logCPM, col=col.pan, Rowv=TRUE, scale="none", 
+          trace="none", dendrogram="both", cexRow=0.5, cexCol=0.7, density.info="none",
+          margin=c(10,9), lhei=c(2,10), lwid=c(2,6))
+
+```

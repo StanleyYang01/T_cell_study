@@ -1,0 +1,21 @@
+Pathway	N	Up	Down	P.Up	P.Down
+IL-17 signaling pathway	61	7	0	8.52543544278843e-10	1
+Legionellosis	48	6	0	8.88769723929043e-09	1
+MAPK signaling pathway	221	9	0	2.82497500954817e-08	1
+Antigen processing and presentation	65	6	0	5.74481024273629e-08	1
+Osteoclast differentiation	112	7	0	6.27461909720181e-08	1
+Influenza A	135	7	0	2.27047423531425e-07	1
+HTLV-I infection	223	8	0	4.83418983206609e-07	1
+Toxoplasmosis	93	6	0	4.95922309138417e-07	1
+Measles	110	6	0	1.33814985245183e-06	1
+Epstein-Barr virus infection	184	7	0	1.84306134436284e-06	1
+Hepatitis B	120	6	0	2.22831982967854e-06	1
+Estrogen signaling pathway	74	5	0	3.83553585219409e-06	1
+Toll-like receptor signaling pathway	79	5	0	5.30276550537647e-06	1
+NF-kappa B signaling pathway	83	5	0	6.76667490652605e-06	1
+Protein processing in endoplasmic reticulum	150	6	0	8.11935415409488e-06	1
+Chagas disease (American trypanosomiasis)	89	5	0	9.53651916407424e-06	1
+TNF signaling pathway	94	5	0	1.24622364062075e-05	1
+TGF-beta signaling pathway	53	4	0	2.49835001072399e-05	1
+Leishmaniasis	60	4	0	4.09274192231203e-05	1
+Rheumatoid arthritis	61	4	0	4.36969915463811e-05	1

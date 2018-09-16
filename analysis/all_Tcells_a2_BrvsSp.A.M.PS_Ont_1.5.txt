@@ -1,0 +1,2 @@
+Term	Ont	N	Up	Down	P.Up	P.Down
+respiratory chain	CC	78	10	37	8.30363909263649e-07	4.45048489879966e-06

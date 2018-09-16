@@ -1,0 +1,8 @@
+Pathway	N	Up	Down	P.Up	P.Down
+Antifolate resistance	24	1	0	0.0151112811246727	1
+ABC transporters	28	1	0	0.0176103037135436	1
+Bile secretion	39	1	0	0.0244540300245746	1
+Notch signaling pathway	39	1	0	0.0244540300245746	1
+N-Glycan biosynthesis	45	1	0	0.0281693592814194	1
+Transcriptional misregulation in cancer	131	0	1	1	0.0408681899847324
+RNA transport	147	1	1	0.0894634062241135	0.0457724611968792
